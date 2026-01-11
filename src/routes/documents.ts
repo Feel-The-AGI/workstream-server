@@ -5,6 +5,64 @@ import { parseDocumentWithGemini } from "../lib/gemini";
 
 export const documentRoutes = new Hono<AppEnv>();
 
+// List all my documents
+documentRoutes.get("/", requireAuth, async (c) => {
+  const auth = c.get("auth");
+
+  const student = await db.student.findUnique({
+    where: { userId: auth.userId },
+  });
+
+  if (!student) {
+    return c.json({ documents: [] });
+  }
+
+  const documents = await db.document.findMany({
+    where: { studentId: student.id },
+    orderBy: { uploadedAt: "desc" },
+  });
+
+  return c.json({ documents });
+});
+
+// Create document from external upload (e.g., Uploadthing)
+documentRoutes.post("/", requireAuth, async (c) => {
+  const auth = c.get("auth");
+  
+  const student = await db.student.findUnique({
+    where: { userId: auth.userId },
+  });
+
+  if (!student) {
+    return c.json({ error: "Student profile required" }, 400);
+  }
+
+  const body = await c.req.json();
+  const { type, name, fileName, fileUrl, fileSize, mimeType } = body;
+
+  if (!fileUrl || !type) {
+    return c.json({ error: "Missing required fields" }, 400);
+  }
+
+  const document = await db.document.create({
+    data: {
+      studentId: student.id,
+      type: type as any,
+      name: name || fileName,
+      fileName: fileName || "document",
+      fileUrl,
+      fileSize: fileSize || 0,
+      mimeType: mimeType || "application/pdf",
+      verificationStatus: "PENDING",
+    },
+  });
+
+  // Trigger async document parsing with Gemini
+  parseDocumentWithGemini(document.id, fileUrl).catch(console.error);
+
+  return c.json({ document }, 201);
+});
+
 // Upload document (placeholder - actual file upload would use cloud storage)
 documentRoutes.post("/upload", requireAuth, async (c) => {
   const auth = c.get("auth");

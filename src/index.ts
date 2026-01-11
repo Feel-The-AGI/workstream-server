@@ -10,6 +10,12 @@ import { programRoutes } from "./routes/programs";
 import { applicationRoutes } from "./routes/applications";
 import { userRoutes } from "./routes/users";
 import { documentRoutes } from "./routes/documents";
+import { universityRoutes } from "./routes/universities";
+import { employerRoutes } from "./routes/employers";
+import { adminRoutes } from "./routes/admin";
+import { paymentRoutes } from "./routes/payments";
+import { messageRoutes } from "./routes/messages";
+import { notificationRoutes } from "./routes/notifications";
 import { errorHandler } from "./middleware/error-handler";
 
 const app = new Hono();
@@ -24,6 +30,9 @@ app.use(
     origin: [
       "http://localhost:3000",
       "http://localhost:3001",
+      "http://localhost:3002",
+      "http://localhost:3003",
+      "http://localhost:3004",
       process.env.FRONTEND_URL || "",
     ].filter(Boolean),
     credentials: true,
@@ -52,6 +61,12 @@ api.route("/users", userRoutes);
 api.route("/programs", programRoutes);
 api.route("/applications", applicationRoutes);
 api.route("/documents", documentRoutes);
+api.route("/university", universityRoutes);
+api.route("/employer", employerRoutes);
+api.route("/admin", adminRoutes);
+api.route("/payments", paymentRoutes);
+api.route("/messages", messageRoutes);
+api.route("/notifications", notificationRoutes);
 
 app.route("/api/v1", api);
 
