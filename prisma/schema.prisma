@@ -1,0 +1,540 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  STUDENT
+  UNIVERSITY_ADMIN
+  EMPLOYER_ADMIN
+  PLATFORM_ADMIN
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  SHORTLISTED
+  INTERVIEW_SCHEDULED
+  ACCEPTED
+  REJECTED
+  ENROLLED
+  COMPLETED
+  WITHDRAWN
+}
+
+enum ProgramStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum DocumentType {
+  TRANSCRIPT
+  CERTIFICATE
+  CV
+  ID_DOCUMENT
+  RECOMMENDATION
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum MessageType {
+  SYSTEM
+  USER
+  NOTIFICATION
+}
+
+// ============================================
+// USER & AUTH
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  clerkId       String    @unique
+  email         String    @unique
+  firstName     String?
+  lastName      String?
+  phone         String?
+  avatarUrl     String?
+  role          UserRole  @default(STUDENT)
+  emailVerified Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations based on role
+  student         Student?
+  universityAdmin UniversityAdmin?
+  employerAdmin   EmployerAdmin?
+
+  // Activity
+  sentMessages     Message[]      @relation("SentMessages")
+  receivedMessages Message[]      @relation("ReceivedMessages")
+  notifications    Notification[]
+
+  @@index([clerkId])
+  @@index([email])
+  @@index([role])
+}
+
+// ============================================
+// STUDENT
+// ============================================
+
+model Student {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Personal Info
+  dateOfBirth     DateTime?
+  gender          String?
+  nationality     String?
+  address         String?
+  city            String?
+  region          String?
+  
+  // Education Background
+  highestEducation    String?
+  institution         String?
+  graduationYear      Int?
+  fieldOfStudy        String?
+  gpa                 Float?
+  
+  // Academic Scores (for eligibility checks)
+  mathGrade           String?
+  englishGrade        String?
+  scienceGrade        String?
+  
+  // Preferences
+  interestedFields    String[]  @default([])
+  preferredLocations  String[]  @default([])
+  
+  // Profile completeness
+  profileComplete     Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  documents       Document[]
+  applications    Application[]
+  payments        Payment[]
+
+  @@index([userId])
+}
+
+// ============================================
+// UNIVERSITY
+// ============================================
+
+model University {
+  id              String   @id @default(cuid())
+  name            String
+  shortName       String?
+  description     String?
+  logoUrl         String?
+  website         String?
+  
+  // Location
+  address         String?
+  city            String?
+  region          String?
+  country         String   @default("Ghana")
+  
+  // Contact
+  email           String?
+  phone           String?
+  
+  // Accreditation
+  accreditationNumber String?
+  isVerified          Boolean  @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  admins          UniversityAdmin[]
+  programs        Program[]
+
+  @@index([name])
+}
+
+model UniversityAdmin {
+  id              String      @id @default(cuid())
+  userId          String      @unique
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  universityId    String
+  university      University  @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  
+  title           String?
+  department      String?
+  canManagePrograms   Boolean  @default(true)
+  canReviewApplications Boolean @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([universityId])
+}
+
+// ============================================
+// EMPLOYER
+// ============================================
+
+model Employer {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  logoUrl         String?
+  website         String?
+  industry        String?
+  size            String?  // e.g., "1-50", "51-200", "201-500", "500+"
+  
+  // Location
+  headquarters    String?
+  address         String?
+  city            String?
+  region          String?
+  country         String   @default("Ghana")
+  
+  // Contact
+  email           String?
+  phone           String?
+  
+  // Verification
+  registrationNumber String?
+  isVerified         Boolean  @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  admins          EmployerAdmin[]
+  programs        Program[]
+
+  @@index([name])
+  @@index([industry])
+}
+
+model EmployerAdmin {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employerId      String
+  employer        Employer  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  
+  title           String?
+  department      String?
+  canCreatePrograms   Boolean  @default(false)
+  canReviewCandidates Boolean  @default(true)
+  canApproveHires     Boolean  @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([employerId])
+}
+
+// ============================================
+// PROGRAM
+// ============================================
+
+model Program {
+  id              String        @id @default(cuid())
+  
+  // Basic Info
+  title           String
+  slug            String        @unique
+  description     String
+  shortDescription String?
+  
+  // Partners
+  universityId    String
+  university      University    @relation(fields: [universityId], references: [id])
+  employerId      String
+  employer        Employer      @relation(fields: [employerId], references: [id])
+  
+  // Program Details
+  field           String        // e.g., "IT", "Engineering", "Business"
+  specialization  String?       // e.g., "Software Development", "Data Analytics"
+  jobRole         String        // Target job title
+  
+  // Capacity
+  totalSlots      Int
+  availableSlots  Int
+  
+  // Timeline
+  applicationDeadline DateTime
+  startDate           DateTime
+  endDate             DateTime
+  durationWeeks       Int
+  
+  // Requirements
+  minEducation        String?
+  requiredGrades      Json?     // e.g., { "math": "C", "english": "B" }
+  additionalRequirements String[]  @default([])
+  
+  // Financials
+  applicationFee      Float     @default(0)
+  isFunded            Boolean   @default(true)  // Employer-funded
+  stipendAmount       Float?
+  
+  // Co-op Details
+  hasInternship       Boolean   @default(true)
+  internshipDuration  Int?      // weeks
+  
+  // Status
+  status              ProgramStatus @default(DRAFT)
+  isPublished         Boolean       @default(false)
+  
+  // Metadata
+  tags                String[]  @default([])
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  applications    Application[]
+  cohorts         Cohort[]
+
+  @@index([universityId])
+  @@index([employerId])
+  @@index([field])
+  @@index([status])
+  @@index([slug])
+}
+
+model Cohort {
+  id              String   @id @default(cuid())
+  programId       String
+  program         Program  @relation(fields: [programId], references: [id])
+  
+  name            String   // e.g., "Cohort 2025-Q1"
+  startDate       DateTime
+  endDate         DateTime
+  
+  maxCapacity     Int
+  currentEnrolled Int      @default(0)
+  
+  status          String   @default("PENDING") // PENDING, ACTIVE, COMPLETED
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  applications    Application[]
+
+  @@index([programId])
+}
+
+// ============================================
+// APPLICATION
+// ============================================
+
+model Application {
+  id              String            @id @default(cuid())
+  applicationNumber String          @unique
+  
+  studentId       String
+  student         Student           @relation(fields: [studentId], references: [id])
+  programId       String
+  program         Program           @relation(fields: [programId], references: [id])
+  cohortId        String?
+  cohort          Cohort?           @relation(fields: [cohortId], references: [id])
+  
+  // Application Data
+  status          ApplicationStatus @default(DRAFT)
+  
+  // Eligibility
+  meetsRequirements   Boolean?
+  eligibilityNotes    String?
+  aiScore             Float?        // AI-generated match score
+  
+  // Responses
+  motivationLetter    String?
+  additionalAnswers   Json?
+  
+  // Review
+  reviewNotes         String?
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  
+  // Interview
+  interviewDate       DateTime?
+  interviewNotes      String?
+  interviewScore      Float?
+  
+  // Final Decision
+  acceptedAt          DateTime?
+  rejectedAt          DateTime?
+  rejectionReason     String?
+  
+  // Timestamps
+  submittedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  documents       ApplicationDocument[]
+  payments        Payment[]
+
+  @@unique([studentId, programId])
+  @@index([studentId])
+  @@index([programId])
+  @@index([status])
+  @@index([applicationNumber])
+}
+
+// ============================================
+// DOCUMENTS
+// ============================================
+
+model Document {
+  id              String        @id @default(cuid())
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  type            DocumentType
+  name            String
+  fileName        String
+  fileUrl         String
+  fileSize        Int
+  mimeType        String
+  
+  // AI Processing
+  parsedData      Json?         // Extracted data from Gemini
+  verificationStatus DocumentStatus @default(PENDING)
+  verificationNotes  String?
+  
+  uploadedAt      DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  applicationDocuments ApplicationDocument[]
+
+  @@index([studentId])
+  @@index([type])
+}
+
+model ApplicationDocument {
+  id              String      @id @default(cuid())
+  applicationId   String
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  documentId      String
+  document        Document    @relation(fields: [documentId], references: [id])
+  
+  required        Boolean     @default(true)
+  
+  createdAt       DateTime  @default(now())
+
+  @@unique([applicationId, documentId])
+  @@index([applicationId])
+}
+
+// ============================================
+// PAYMENTS
+// ============================================
+
+model Payment {
+  id              String        @id @default(cuid())
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id])
+  applicationId   String?
+  application     Application?  @relation(fields: [applicationId], references: [id])
+  
+  amount          Float
+  currency        String        @default("GHS")
+  description     String
+  
+  // Payment Details
+  paymentMethod   String?       // "mobile_money", "card", "bank_transfer"
+  paymentProvider String?       // "paystack", "flutterwave", etc.
+  providerRef     String?
+  
+  status          PaymentStatus @default(PENDING)
+  
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([studentId])
+  @@index([applicationId])
+  @@index([status])
+}
+
+// ============================================
+// MESSAGING & NOTIFICATIONS
+// ============================================
+
+model Message {
+  id              String      @id @default(cuid())
+  senderId        String
+  sender          User        @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId      String
+  receiver        User        @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  
+  type            MessageType @default(USER)
+  subject         String?
+  content         String
+  
+  isRead          Boolean     @default(false)
+  readAt          DateTime?
+  
+  // Thread support
+  parentId        String?
+  parent          Message?    @relation("MessageReplies", fields: [parentId], references: [id])
+  replies         Message[]   @relation("MessageReplies")
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([isRead])
+}
+
+model Notification {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title           String
+  message         String
+  type            String   // "application", "program", "system", etc.
+  
+  actionUrl       String?
+  metadata        Json?
+  
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
