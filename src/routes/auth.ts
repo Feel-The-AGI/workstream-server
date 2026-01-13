@@ -68,6 +68,42 @@ authRoutes.post("/webhook/clerk", zValidator("json", webhookSchema), async (c) =
   return c.json({ received: true });
 });
 
+// Manual sync endpoint (called from frontend after signup)
+const syncSchema = z.object({
+  clerkId: z.string(),
+  email: z.string().email(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  imageUrl: z.string().nullable(),
+});
+
+authRoutes.post("/sync", zValidator("json", syncSchema), async (c) => {
+  const body = c.req.valid("json");
+
+  // Check if user already exists
+  const existingUser = await db.user.findUnique({
+    where: { clerkId: body.clerkId },
+  });
+
+  if (existingUser) {
+    return c.json({ user: existingUser });
+  }
+
+  // Create new user
+  const user = await db.user.create({
+    data: {
+      clerkId: body.clerkId,
+      email: body.email,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      avatarUrl: body.imageUrl,
+      role: "STUDENT", // Default role
+    },
+  });
+
+  return c.json({ user });
+});
+
 // Get current user profile
 authRoutes.get("/me", async (c) => {
   const auth = c.get("auth");
