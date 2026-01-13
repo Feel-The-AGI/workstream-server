@@ -53,6 +53,7 @@ userRoutes.put("/profile", requireAuth, zValidator("json", profileUpdateSchema),
   const updateData: any = {};
   if (body.firstName) updateData.firstName = body.firstName;
   if (body.lastName) updateData.lastName = body.lastName;
+  if (body.phone) updateData.phone = body.phone;
 
   const user = await db.user.update({
     where: { id: auth.userId },
@@ -60,18 +61,15 @@ userRoutes.put("/profile", requireAuth, zValidator("json", profileUpdateSchema),
     include: { student: true },
   });
 
-  // Create or update student profile if education data provided
-  if (body.phone || body.dateOfBirth || body.location || body.bio || body.education) {
+  // Create or update student profile if other data provided
+  if (body.dateOfBirth || body.location || body.education) {
     const studentData: any = {};
-    if (body.phone) studentData.phone = body.phone;
     if (body.dateOfBirth) studentData.dateOfBirth = new Date(body.dateOfBirth);
     if (body.location) studentData.city = body.location;
-    if (body.bio) studentData.bio = body.bio;
     if (body.education) {
       studentData.institution = body.education.institution;
       studentData.fieldOfStudy = body.education.fieldOfStudy;
-      studentData.currentYear = body.education.currentYear;
-      studentData.expectedGraduation = body.education.expectedGraduation;
+      studentData.graduationYear = new Date(body.education.expectedGraduation).getFullYear();
       studentData.gpa = body.education.cgpa;
       studentData.highestEducation = body.education.degree;
     }
