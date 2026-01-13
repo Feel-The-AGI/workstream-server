@@ -6,6 +6,101 @@ import { requireAuth, requireRole, type AppEnv } from "../middleware/auth";
 
 export const userRoutes = new Hono<AppEnv>();
 
+// General profile update schema (for onboarding)
+const profileUpdateSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  phone: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  location: z.string().optional(),
+  bio: z.string().optional(),
+  education: z.object({
+    institution: z.string(),
+    degree: z.string(),
+    fieldOfStudy: z.string(),
+    currentYear: z.number(),
+    expectedGraduation: z.string(),
+    cgpa: z.number(),
+  }).optional(),
+});
+
+// Get current user profile
+userRoutes.get("/profile", requireAuth, async (c) => {
+  const auth = c.get("auth");
+
+  const user = await db.user.findUnique({
+    where: { id: auth.userId },
+    include: {
+      student: true,
+      universityAdmin: { include: { university: true } },
+      employerAdmin: { include: { employer: true } },
+    },
+  });
+
+  if (!user) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  return c.json({ profile: user });
+});
+
+// Update current user profile
+userRoutes.put("/profile", requireAuth, zValidator("json", profileUpdateSchema), async (c) => {
+  const auth = c.get("auth");
+  const body = c.req.valid("json");
+
+  // Update user basic info
+  const updateData: any = {};
+  if (body.firstName) updateData.firstName = body.firstName;
+  if (body.lastName) updateData.lastName = body.lastName;
+
+  const user = await db.user.update({
+    where: { id: auth.userId },
+    data: updateData,
+    include: { student: true },
+  });
+
+  // Create or update student profile if education data provided
+  if (body.phone || body.dateOfBirth || body.location || body.bio || body.education) {
+    const studentData: any = {};
+    if (body.phone) studentData.phone = body.phone;
+    if (body.dateOfBirth) studentData.dateOfBirth = new Date(body.dateOfBirth);
+    if (body.location) studentData.city = body.location;
+    if (body.bio) studentData.bio = body.bio;
+    if (body.education) {
+      studentData.institution = body.education.institution;
+      studentData.fieldOfStudy = body.education.fieldOfStudy;
+      studentData.currentYear = body.education.currentYear;
+      studentData.expectedGraduation = body.education.expectedGraduation;
+      studentData.gpa = body.education.cgpa;
+      studentData.highestEducation = body.education.degree;
+    }
+    studentData.profileComplete = true;
+
+    if (user.student) {
+      await db.student.update({
+        where: { userId: auth.userId },
+        data: studentData,
+      });
+    } else {
+      await db.student.create({
+        data: {
+          userId: auth.userId,
+          ...studentData,
+        },
+      });
+    }
+  }
+
+  // Fetch updated user with student profile
+  const updatedUser = await db.user.findUnique({
+    where: { id: auth.userId },
+    include: { student: true },
+  });
+
+  return c.json({ profile: updatedUser });
+});
+
 // Student profile update schema
 const studentProfileSchema = z.object({
   dateOfBirth: z.string().optional(),
